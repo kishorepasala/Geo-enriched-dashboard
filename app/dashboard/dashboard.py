@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import sqlite3
@@ -34,5 +35,3 @@ else:
         st.metric("Average Temperature (C)", round(df['temperature'].mean(), 2))
     with col2:
         st.metric("Avg wind speed (km/h)", round(df['windspeed'].mean(), 2))
-
-
