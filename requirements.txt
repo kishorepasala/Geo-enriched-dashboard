@@ -5,3 +5,4 @@ geopy
 pandas
 requests
 python-dotenv
+streamlit

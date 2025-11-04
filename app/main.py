@@ -15,3 +15,4 @@ app.include_router(router)
 @app.get("/")
 def root():
     return {"message":"Geo Enrichment DashBoard API is running"}
+

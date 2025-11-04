@@ -4,61 +4,55 @@ from app.services.geocode_service import batch_geocode
 from app.services.weather_service import enrich_with_weather
 from app.database.database import SessionLocal
 from app.database.models import EnrichedLocation
-
-def load_addresses(file_path: str):
-    """Read the input CSV file and returns a list of addresses"""
-    file = Path(file_path)
-    if not file.exists():
-        raise FileNotFoundError(f"Input file not found: {file_path}")
-
-    addresses = []
-    with open(file_path, mode='r', encoding="utf-8") as csv_file:
-        reader = csv.DictReader(csv_file)
-        for row in reader:
-            address = row.get("address")
-            if address and address.strip():
-                addresses.append(address.strip())
-
-    return addresses
+from app.services.air_quality_service import fetch_air_quality
+from app.services.weather_service import fetch_weather
 
 
 
-def save_to_database(data):
+def run_pipeline():
+    csv_path = Path("data/input_addresses.csv")
+    if not csv_path.exists():
+        print("❌ input_addresses.csv not found.")
+        return
+
+    with open(csv_path, newline='') as f:
+        reader = csv.DictReader(f)
+        addresses = [row["address"] for row in reader if row.get("address")]
+
+    if not addresses:
+        print("⚠️ No addresses found in CSV.")
+        return
+
+    print(f"🔍 Found {len(addresses)} addresses. Starting enrichment...")
+
+    geocoded = batch_geocode(addresses)
+    enriched = enrich_with_weather(geocoded)
     session = SessionLocal()
-    try:
-        for entry in data:
-            record = EnrichedLocation(
-                address=entry["address"],
-                latitude=entry["latitude"],
-                longitude=entry["longitude"],
-                temperature=entry["temperature"],
-                windspeed=entry["windspeed"],
-                time=entry["time"]
-            )
-            session.add(record)
-        session.commit()
-        print("Data saved to database")
-    except Exception as e:
-        session.rollback()
-        print("Error saving data to database: ", e)
-    finally:
-        session.close()
 
+    for item in enriched:
+        air = fetch_air_quality(item["latitude"], item["longitude"])
+        weather = fetch_weather(item["latitude"], item["longitude"])
+        entry = EnrichedLocation(
+            address=item["address"],
+            latitude=item["latitude"],
+            longitude=item["longitude"],
+            temperature=weather.get("temperature"),
+            humidity=weather.get("humidity"),
+            wind_speed=weather.get("windspeed"),
+            aqi=air.get("aqi"),
+            pm10=air.get("pm10"),
+            pm2_5=air.get("pm2_5"),
+            co=air.get("co"),
+            no2=air.get("no2"),
+            so2=air.get("so2"),
+            o3=air.get("o3"),
+        )
+        session.add(entry)
+        print(f"✅ Saved: {item['address']}")
+    session.commit()
+    session.close()
+
+    print("🚀 Pipeline completed successfully.")
 
 if __name__ == "__main__":
-    input_path = "/Users/kishore/PythonProject/PythonProject/PythonProject/Geo enriched dashboard/data/input_addresses.csv"
-    addresses = load_addresses(input_path)
-    print("Loaded addresses: {addresses}")
-
-    geocoded_data = batch_geocode(addresses)
-    print("Geocoded Data: ", geocoded_data)
-
-    enriched_data = enrich_with_weather(geocoded_data)
-    print("Weather Enriched Data: ", enriched_data)
-
-    save_to_database(enriched_data)
-
-
-
-
-
+    run_pipeline()
